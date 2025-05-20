@@ -1,0 +1,22 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: productos-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/productos_db # URL de la base de datos PostgreSQL
+    username: postgres # Usuario de la base de datos
+    password: sasa # Contraseña del usuario
+    driver-class-name: org.postgresql.Driver # Driver de PostgreSQL
+  jpa:
+    hibernate:
+      ddl-auto: update # Mantenemos validate, ya que Flyway es quien crea el esquema
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true # Habilita Flyway
+    locations: classpath:db/migration # Directorio donde Flyway buscará los scripts de migración
+    baseline-on-migrate: true # Establece la línea de base si el esquema ya existe y está vacío
