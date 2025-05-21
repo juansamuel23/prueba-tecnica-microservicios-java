@@ -1,15 +1,19 @@
 package com.example.inventario_service.controller;
 
-import com.example.inventario_service.dto.InventarioRequest;
-import com.example.inventario_service.dto.InventarioResponse;
 import com.example.inventario_service.model.Inventario;
 import com.example.inventario_service.service.InventarioService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import com.example.inventario_service.jsonapi.JsonApiData;
+import com.example.inventario_service.jsonapi.JsonApiResponse;
+import com.example.inventario_service.jsonapi.InventarioAttributes;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/inventario")
@@ -27,9 +31,23 @@ public class InventarioController {
      * @return ResponseEntity con el objeto Inventario creado/actualizado y 201 CREATED.
      */
     @PostMapping
-    public ResponseEntity<Inventario> createOrUpdateInventario(@RequestBody Inventario inventario) {
+    public ResponseEntity<JsonApiResponse<InventarioAttributes>> createOrUpdateInventario(@RequestBody Inventario inventario) {
         Inventario savedInventario = inventarioService.saveInventario(inventario);
-        return new ResponseEntity<>(savedInventario, HttpStatus.CREATED);
+
+        // Convertir la entidad Inventario a JsonApiData<InventarioAttributes>
+        InventarioAttributes attributes = new InventarioAttributes(
+                savedInventario.getProductoId(),
+                savedInventario.getCantidad()
+        );
+        JsonApiData<InventarioAttributes> data = new JsonApiData<>(
+                savedInventario.getId().toString(), // El ID debe ser String en JSON API
+                "inventarios", // Tipo de recurso
+                attributes
+        );
+
+        JsonApiResponse<InventarioAttributes> response = new JsonApiResponse<>(data);
+
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     /**
@@ -37,10 +55,21 @@ public class InventarioController {
      * GET /api/inventario
      * @return ResponseEntity con la lista de Inventarios y 200 OK.
      */
-    @GetMapping
-    public ResponseEntity<Iterable<Inventario>> getAllInventario() {
+    @GetMapping // Suponiendo que tienes un endpoint para listar todo el inventario
+    public ResponseEntity<JsonApiResponse<InventarioAttributes>> getAllInventario() {
         Iterable<Inventario> inventarios = inventarioService.getAllInventario();
-        return new ResponseEntity<>(inventarios, HttpStatus.OK);
+
+        // Convertir la lista de entidades Inventario a una lista de JsonApiData<InventarioAttributes>
+        List<JsonApiData<InventarioAttributes>> dataList = ((List<Inventario>) inventarios).stream() // Cast a List para usar stream
+                .map(inventario -> new JsonApiData<>(
+                        inventario.getId().toString(),
+                        "inventarios",
+                        new InventarioAttributes(inventario.getProductoId(), inventario.getCantidad())
+                ))
+                .collect(Collectors.toList());
+
+        JsonApiResponse<InventarioAttributes> response = new JsonApiResponse<>(dataList);
+        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     /**
@@ -50,10 +79,22 @@ public class InventarioController {
      * @return ResponseEntity con la entrada de inventario, o 404 NOT_FOUND.
      */
     @GetMapping("/{productoId}")
-    public ResponseEntity<Inventario> getInventarioByProductoId(@PathVariable Long productoId) {
-        return inventarioService.getInventarioByProductoId(productoId)
-                .map(inventario -> new ResponseEntity<>(inventario, HttpStatus.OK))
-                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    public ResponseEntity<JsonApiResponse<InventarioAttributes>> getInventarioByProductoId(@PathVariable Long productoId) {
+        Optional<Inventario> inventarioOptional = inventarioService.getInventarioByProductoId(productoId);
+
+        return inventarioOptional.map(inventario -> {
+            // Convertir la entidad Inventario a JsonApiData<InventarioAttributes>
+            InventarioAttributes attributes = new InventarioAttributes(
+                    inventario.getProductoId(),
+                    inventario.getCantidad()
+            );
+            JsonApiData<InventarioAttributes> data = new JsonApiData<>(
+                    inventario.getId().toString(), // El ID del registro de inventario (no el productoId)
+                    "inventarios", // Tipo de recurso
+                    attributes
+            );
+            return new ResponseEntity<>(new JsonApiResponse<>(data), HttpStatus.OK);
+        }).orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
     /**
@@ -64,16 +105,27 @@ public class InventarioController {
      * @return ResponseEntity con la entrada de inventario actualizada, 400 BAD_REQUEST si no hay stock, o 404 NOT_FOUND.
      */
     @PutMapping("/comprar/{productoId}/{cantidad}")
-    public ResponseEntity<Inventario> reduceStock(@PathVariable Long productoId, @PathVariable Integer cantidad) {
+    public ResponseEntity<JsonApiResponse<InventarioAttributes>> reducirStockProducto(
+            @PathVariable Long productoId,
+            @PathVariable Integer cantidad) {
         try {
             Inventario updatedInventario = inventarioService.reduceStock(productoId, cantidad);
-            return new ResponseEntity<>(updatedInventario, HttpStatus.OK);
+
+            // Convertir la entidad Inventario a JsonApiData<InventarioAttributes>
+            InventarioAttributes attributes = new InventarioAttributes(
+                    updatedInventario.getProductoId(),
+                    updatedInventario.getCantidad()
+            );
+            JsonApiData<InventarioAttributes> data = new JsonApiData<>(
+                    updatedInventario.getId().toString(),
+                    "inventarios",
+                    attributes
+            );
+            return new ResponseEntity<>(new JsonApiResponse<>(data), HttpStatus.OK);
         } catch (IllegalArgumentException e) {
-            // Captura errores como "No hay suficiente stock" o "Producto no encontrado"
+            // Si el servicio de inventario lanza una IllegalArgumentException (ej. stock insuficiente)
+            // Puedes devolver un 400 Bad Request
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        } catch (Exception e) {
-            // Captura cualquier otro error inesperado
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

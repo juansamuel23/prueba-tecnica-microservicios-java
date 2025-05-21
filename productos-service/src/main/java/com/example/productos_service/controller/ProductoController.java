@@ -1,8 +1,8 @@
 package com.example.productos_service.controller;
 
 
+import com.example.productos_service.jsonapi.ProductoConStockAttributes;
 import com.example.productos_service.model.Producto;
-import com.example.productos_service.model.ProductoConStockDTO;
 import com.example.productos_service.service.ProductoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -15,10 +15,15 @@ import org.springframework.web.bind.annotation.*;
 
 import reactor.core.publisher.Mono;
 import java.util.Optional;
+import com.example.productos_service.jsonapi.JsonApiData;
+import com.example.productos_service.jsonapi.JsonApiResponse;
+import com.example.productos_service.jsonapi.ProductoAttributes;
+import java.util.List;
+import java.util.stream.Collectors;
 
 
 @RestController
-@RequestMapping(value = "/productos", produces = MediaType.APPLICATION_JSON_VALUE)
+@RequestMapping(value = "/api/productos", produces = MediaType.APPLICATION_JSON_VALUE)
 public class ProductoController {
 
     @Autowired
@@ -31,9 +36,25 @@ public class ProductoController {
      * @return ResponseEntity con el producto creado y el estado HTTP 201 CREATED.
      */
     @PostMapping
-    public ResponseEntity<Producto> createProducto(@RequestBody Producto producto) {
+    public ResponseEntity<JsonApiResponse<ProductoAttributes>> createProducto(@RequestBody Producto producto) {
         Producto savedProducto = productoService.saveProducto(producto);
-        return new ResponseEntity<>(savedProducto, HttpStatus.CREATED);
+
+        // Convertir la entidad Producto a JsonApiData<ProductoAttributes>
+        ProductoAttributes attributes = new ProductoAttributes(
+                savedProducto.getNombre(),
+                savedProducto.getDescripcion(),
+                savedProducto.getPrecio()
+        );
+        JsonApiData<ProductoAttributes> data = new JsonApiData<>(
+                savedProducto.getId().toString(), // El ID debe ser String en JSON API
+                "productos", // Tipo de recurso
+                attributes
+        );
+
+        // Envolver en JsonApiResponse
+        JsonApiResponse<ProductoAttributes> response = new JsonApiResponse<>(data);
+
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     /**
@@ -43,10 +64,23 @@ public class ProductoController {
      * @return Mono<ResponseEntity<ProductoConStockDTO>> con el producto y su stock, o 404 NOT_FOUND.
      */
     @GetMapping("/{id}")
-    public Mono<ResponseEntity<ProductoConStockDTO>> getProductoById(@PathVariable Long id) {
-        return productoService.getProductoByIdWithStock(id)
-                .map(dto -> new ResponseEntity<>(dto, HttpStatus.OK))
-                .defaultIfEmpty(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    public ResponseEntity<JsonApiResponse<ProductoAttributes>> getProductoById(@PathVariable Long id) {
+        Optional<Producto> productoOptional = productoService.getProductoById(id);
+
+        return productoOptional.map(producto -> {
+            // Convertir la entidad Producto a JsonApiData<ProductoAttributes>
+            ProductoAttributes attributes = new ProductoAttributes(
+                    producto.getNombre(),
+                    producto.getDescripcion(),
+                    producto.getPrecio()
+            );
+            JsonApiData<ProductoAttributes> data = new JsonApiData<>(
+                    producto.getId().toString(), // El ID debe ser String
+                    "productos", // Tipo de recurso
+                    attributes
+            );
+            return new ResponseEntity<>(new JsonApiResponse<>(data), HttpStatus.OK);
+        }).orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
     /**
@@ -70,10 +104,30 @@ public class ProductoController {
      * @return ResponseEntity con una página de productos y el estado HTTP 200 OK.
      */
     @GetMapping
-    public ResponseEntity<Page<Producto>> getAllProductos(
-            @PageableDefault(page = 0, size = 10, sort = "nombre") Pageable pageable) { // <-- Modificado
-        Page<Producto> productosPage = productoService.getAllProductos(pageable); // <-- Llama al servicio con Pageable
-        return new ResponseEntity<>(productosPage, HttpStatus.OK);
+    public ResponseEntity<JsonApiResponse<ProductoAttributes>> getAllProductos(
+            @PageableDefault(page = 0, size = 10, sort = "nombre") Pageable pageable) {
+
+        Page<Producto> productosPage = productoService.getAllProductos(pageable);
+
+        // Convertir la lista de entidades Producto a una lista de JsonApiData<ProductoAttributes>
+        List<JsonApiData<ProductoAttributes>> dataList = productosPage.getContent().stream()
+                .map(producto -> new JsonApiData<>(
+                        producto.getId().toString(), // ID como String
+                        "productos", // Tipo de recurso
+                        new ProductoAttributes(producto.getNombre(), producto.getDescripcion(), producto.getPrecio())
+                ))
+                .collect(Collectors.toList());
+
+        // Envolver la lista en JsonApiResponse
+        JsonApiResponse<ProductoAttributes> response = new JsonApiResponse<>(dataList);
+
+        // Opcional: Si quieres añadir metadatos de paginación al JsonApiResponse
+        // JsonApiMeta meta = new JsonApiMeta();
+        // meta.setTotalPages(productosPage.getTotalPages());
+        // meta.setTotalElements(productosPage.getTotalElements());
+        // response.setMeta(meta);
+
+        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     /**
@@ -84,15 +138,26 @@ public class ProductoController {
      * @return ResponseEntity con el producto actualizado, o 404 NOT_FOUND si no existe.
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Producto> updateProducto(@PathVariable Long id, @RequestBody Producto producto) {
-        Optional<Producto> existingProducto = productoService.getProductoById(id);
-        if (existingProducto.isPresent()) {
-            producto.setId(id); // Asegura que el ID de la URL se use
-            Producto updatedProducto = productoService.saveProducto(producto);
-            return new ResponseEntity<>(updatedProducto, HttpStatus.OK);
-        } else {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
+    public ResponseEntity<JsonApiResponse<ProductoAttributes>> updateProducto(@PathVariable Long id, @RequestBody Producto producto) {
+        // Asegúrate de que el ID del producto que llega en el body se establezca
+        // para que saveProducto lo use como actualización
+        producto.setId(id);
+        Producto updatedProducto = productoService.saveProducto(producto); // saveProducto maneja tanto create como update
+
+        // Convertir la entidad Producto a JsonApiData<ProductoAttributes>
+        ProductoAttributes attributes = new ProductoAttributes(
+                updatedProducto.getNombre(),
+                updatedProducto.getDescripcion(),
+                updatedProducto.getPrecio()
+        );
+        JsonApiData<ProductoAttributes> data = new JsonApiData<>(
+                updatedProducto.getId().toString(), // El ID debe ser String en JSON API
+                "productos", // Tipo de recurso
+                attributes
+        );
+
+        JsonApiResponse<ProductoAttributes> response = new JsonApiResponse<>(data);
+        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     /**
@@ -114,26 +179,57 @@ public class ProductoController {
 
     /**
      * Reduce el stock de un producto específico.
-     * PUT /api/productos/{id}/reducir-stock/{cantidad}
-     * @param id El ID del producto.
+     * PUT /api/productos/{id}/reducir-stock/{cantidad}}
+     *
      * @param cantidad La cantidad a reducir.
      * @return Mono<ResponseEntity<ProductoConStockDTO>> con el producto y su stock actualizado,
      * o 400 BAD_REQUEST si hay un problema (ej. stock insuficiente), o 404 NOT_FOUND.
      */
-    @PutMapping("/{id}/reducir-stock/{cantidad}")
-    public Mono<ResponseEntity<ProductoConStockDTO>> reducirStockProducto(@PathVariable Long id, @PathVariable Integer cantidad) {
-        return productoService.reducirStockProducto(id, cantidad)
-                .map(dto -> new ResponseEntity<>(dto, HttpStatus.OK))
-                .defaultIfEmpty(new ResponseEntity<>(HttpStatus.NOT_FOUND)) // Si el producto no se encuentra o el inventario no devuelve nada
-                .onErrorResume(IllegalArgumentException.class, e -> {
-                    // Captura errores específicos como "stock insuficiente"
-                    System.err.println("Error de cliente al reducir stock para producto " + id + ": " + e.getMessage());
-                    return Mono.just(new ResponseEntity<>(HttpStatus.BAD_REQUEST));
+    @PutMapping("/{productoId}/reducir-stock/{cantidad}")
+    public Mono<ResponseEntity<JsonApiResponse<ProductoConStockAttributes>>> reducirStockProducto(@PathVariable Long productoId, @PathVariable Integer cantidad) {
+        return productoService.reducirStockProducto(productoId, cantidad)
+                .map(dto -> {
+                    ProductoConStockAttributes attributes = new ProductoConStockAttributes(
+                            dto.getNombre(),
+                            dto.getDescripcion(),
+                            dto.getPrecio(),
+                            dto.getStockDisponible()
+                    );
+                    JsonApiData<ProductoConStockAttributes> data = new JsonApiData<>(
+                            dto.getId().toString(),
+                            "productos-con-stock", // El mismo tipo que para el GET con stock
+                            attributes
+                    );
+                    return new ResponseEntity<>(new JsonApiResponse<>(data), HttpStatus.OK);
                 })
-                .onErrorResume(e -> {
-                    // Captura cualquier otra excepción no esperada
-                    System.err.println("Error inesperado al reducir stock para producto " + id + ": " + e.getMessage());
+                .defaultIfEmpty(new ResponseEntity<>(HttpStatus.NOT_FOUND)) // En caso de que el mono esté vacío
+                .onErrorResume(e -> { // Manejo de errores para stock insuficiente
+                    if (e instanceof IllegalArgumentException) {
+                        // Puedes crear una estructura JsonApiError si quieres ser más estricto con el estándar
+                        return Mono.just(new ResponseEntity<>(HttpStatus.BAD_REQUEST));
+                    }
                     return Mono.just(new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR));
                 });
+    }
+
+
+    @GetMapping("/{id}/with-stock") // Asumo que este es el endpoint para obtener con stock
+    public Mono<ResponseEntity<JsonApiResponse<ProductoConStockAttributes>>> getProductoByIdWithStock(@PathVariable Long id) {
+        return productoService.getProductoByIdWithStock(id)
+                .map(dto -> {
+                    ProductoConStockAttributes attributes = new ProductoConStockAttributes(
+                            dto.getNombre(),
+                            dto.getDescripcion(),
+                            dto.getPrecio(),
+                            dto.getStockDisponible()
+                    );
+                    JsonApiData<ProductoConStockAttributes> data = new JsonApiData<>(
+                            dto.getId().toString(),
+                            "productos-con-stock", // Un tipo distinto para este recurso combinado
+                            attributes
+                    );
+                    return new ResponseEntity<>(new JsonApiResponse<>(data), HttpStatus.OK);
+                })
+                .defaultIfEmpty(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 }
