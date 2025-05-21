@@ -1,97 +1,72 @@
-version: '3.9'
+version: '3.8'
 
 services:
-  # Microservicio de Productos
-  productos-service:
-    build:
-      context: ./productos-service # Ruta al Dockerfile del servicio de Productos
-      dockerfile: Dockerfile
-    ports:
-      - "8081:8081" # Mapea el puerto del contenedor al puerto del host
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://productos-db:5432/productos_db
-      SPRING_DATASOURCE_USERNAME: user
-      SPRING_DATASOURCE_PASSWORD: password
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update # o none si Flyway maneja todo
-      SPRING_FLYWAY_URL: jdbc:postgresql://productos-db:5432/productos_db
-      SPRING_FLYWAY_USER: user
-      SPRING_FLYWAY_PASSWORD: password
-      # Otros envs si los tienes, como la API Key para este servicio
-    depends_on:
-      productos-db:
-        condition: service_healthy # Asegura que la DB esté lista antes de iniciar el servicio
-    networks:
-      - microservice-network # Red compartida
-
-  # Base de datos PostgreSQL para Productos
   productos-db:
-    image: postgres:13
-    ports:
-      - "5431:5432" # Mapea un puerto diferente del host para evitar conflictos (5431)
+    image: postgres:13-alpine
+    container_name: productos_db_container
     environment:
       POSTGRES_DB: productos_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: sasa
     volumes:
-      - productos_data:/var/lib/postgresql/data # Persistencia de datos
-    healthcheck: # Healthcheck para asegurar que la DB esté lista
-      test: ["CMD-SHELL", "pg_isready -U user -d productos_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - microservice-network # Red compartida
-
-  # AQUI EMPIEZA EL NUEVO SERVICIO DE INVENTARIO Y SU DB
-
-  # Microservicio de Inventario
-  inventario-service:
-    build:
-      context: ./inventario-service # Ruta al Dockerfile del servicio de Inventario
-      dockerfile: Dockerfile
+      - productos_data:/var/lib/postgresql/data
     ports:
-      - "8082:8082" # Mapea el puerto del contenedor al puerto del host
+      - "5432:5432"
+    networks:
+      - microservices-network
+
+  productos-service:
+    build: ./productos-service # Usará el Dockerfile multi-stage en esta ruta
+    container_name: productos_service_container
+    ports:
+      - "8081:8081" # Host:Container (Puerto de productos-service)
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://inventario-db:5432/inventario_db
-      SPRING_DATASOURCE_USERNAME: user
-      SPRING_DATASOURCE_PASSWORD: password
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update # o none si Flyway maneja todo
-      SPRING_FLYWAY_URL: jdbc:postgresql://inventario-db:5432/inventario_db
-      SPRING_FLYWAY_USER: user
-      SPRING_FLYWAY_PASSWORD: password
-      # Configuración para el servicio de productos si la integración está activa
-      # PRODUCTOS_SERVICE_URL: http://productos-service:8081 # Usar el nombre del servicio Docker
-      # PRODUCTOS_SERVICE_API_KEY: tu_api_key_aqui
+      SPRING_DATASOURCE_URL: jdbc:postgresql://productos-db:5432/productos_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: sasa
+      APP_SECURITY_API_KEY: "SuperSecretaAPIKeyParaMicroservicios2025!"
     depends_on:
-      inventario-db:
-        condition: service_healthy # Asegura que la DB esté lista antes de iniciar el servicio
+      - productos-db
     networks:
-      - microservice-network # Red compartida
+      - microservices-network
+    restart: on-failure
 
-  # Base de datos PostgreSQL para Inventario
   inventario-db:
-    image: postgres:13
-    ports:
-      - "5432:5432" # Mapea el puerto 5432 del contenedor al puerto 5432 del host.
-        # ¡Asegúrate de que no haya otro servicio usando el 5432 en tu host!
-      # productos-db usa 5431 en el host para evitar conflicto.
+    image: postgres:13-alpine
+    container_name: inventario_db_container
     environment:
       POSTGRES_DB: inventario_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: user # ¡Confirmar que coincide con application.yml de inventario-service!
+      POSTGRES_PASSWORD: password # ¡Confirmar que coincide con application.yml de inventario-service!
     volumes:
-      - inventario_data:/var/lib/postgresql/data # Persistencia de datos
-    healthcheck: # Healthcheck para asegurar que la DB esté lista
-      test: ["CMD-SHELL", "pg_isready -U user -d inventario_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - inventario_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432" # Host:Container (Puerto para acceder a inventario-db desde el host si lo necesitas)
     networks:
-      - microservice-network # Red compartida
+      - microservices-network
+
+  inventario-service:
+    build: ./inventario-service # Usará el Dockerfile multi-stage en esta ruta
+    container_name: inventario_service_container
+    ports:
+      - "8082:8082" # Host:Container (Puerto de inventario-service)
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://inventario-db:5432/inventario_db
+      SPRING_DATASOURCE_USERNAME: user # ¡Confirmar!
+      SPRING_DATASOURCE_PASSWORD: password # ¡Confirmar!
+      APP_SECURITY_API_KEY: "SuperSecretaAPIKeyParaMicroservicios2025!"
+      PRODUCTOS_SERVICE_URL: "http://productos-service:8081" # URL interna para llamar a productos-service
+    depends_on:
+      - inventario-db
+      - productos-service
+    networks:
+      - microservices-network
+    restart: on-failure
 
 volumes:
   productos_data:
-  inventario_data: # Define el volumen para los datos de Inventario
+  inventario_data:
 
 networks:
-  microservice-network: # Red común para todos los servicios
+  microservices-network:
+    driver: bridge
