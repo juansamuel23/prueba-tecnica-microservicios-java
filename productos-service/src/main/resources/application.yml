@@ -20,3 +20,6 @@ spring:
     enabled: true # Habilita Flyway
     locations: classpath:db/migration # Directorio donde Flyway buscará los scripts de migración
     baseline-on-migrate: true # Establece la línea de base si el esquema ya existe y está vacío
+
+inventario-service:
+  url: http://inventario-service:8082/api/inventario
