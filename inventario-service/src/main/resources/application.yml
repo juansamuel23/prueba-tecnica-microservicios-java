@@ -1,16 +1,24 @@
 server:
-  port: 8082
+  port: 8082 # Correcto, inventario-service en 8082
 
 spring:
   datasource:
-    url: jdbc:postgresql://inventario-db:5432/inventario_db
-    username: user
-    password: password
+    url: jdbc:postgresql://inventario-db:5432/inventario_db # Correcto, apunta al servicio de DB de Docker
+    username: user # ¡ATENCIÓN AQUÍ!
+    password: password # ¡ATENCIÓN AQUÍ!
   jpa:
     hibernate:
-      ddl-auto: update # Dejamos 'update' para que Hibernate cree la tabla si es necesario
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   flyway:
-    enabled: false
+    enabled: false # Correcto si no usas Flyway en Inventario
+
+app:
+  security:
+    api-key: "SuperSecretaAPIKeyParaMicroservicios2025!"
+
+productos:
+  service:
+    url: "http://productos-service:8081"
