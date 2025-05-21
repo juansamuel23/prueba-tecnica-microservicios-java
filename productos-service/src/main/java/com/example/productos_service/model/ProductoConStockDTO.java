@@ -20,7 +20,7 @@ public class ProductoConStockDTO {
         this.nombre = producto.getNombre();
         this.descripcion = producto.getDescripcion();
         this.precio = producto.getPrecio();
-        this.stockDisponible = null; // Se establecerá después de obtenerlo del servicio de Inventario
+        this.stockDisponible = 0;
     }
 
     // Getters y Setters para todos los campos

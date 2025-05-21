@@ -1,4 +1,4 @@
-package com.example.inventario_service;
+package com.example.inventario_service.service;
 
 import com.example.inventario_service.model.Inventario;
 import com.example.inventario_service.repository.InventarioRepository;
@@ -62,17 +62,23 @@ public class InventarioServiceTest {
         existingInventario.setCantidad(100);
 
         when(inventarioRepository.findByProductoId(101L)).thenReturn(Optional.of(existingInventario));
-        when(inventarioRepository.save(any(Inventario.class))).thenReturn(existingInventario); // Should return the updated entity
+
+        // Corrección: Usar thenAnswer para devolver el objeto Inventario que se pasa al save.
+        // Esto simula que el repositorio guarda el objeto modificado por el servicio.
+        when(inventarioRepository.save(any(Inventario.class))).thenAnswer(invocation -> {
+            Inventario savedInventario = invocation.getArgument(0); // Obtiene el objeto que se intentó guardar
+            return savedInventario; // Retorna el mismo objeto modificado
+        });
 
         Inventario updateInventario = new Inventario();
         updateInventario.setProductoId(101L);
-        updateInventario.setCantidad(120); // New quantity
+        updateInventario.setCantidad(120); // Nueva cantidad
 
         Inventario result = inventarioService.saveInventario(updateInventario);
 
         assertNotNull(result);
         assertEquals(101L, result.getProductoId());
-        assertEquals(100, result.getCantidad()); // Still 100 from mock, but in real scenario it would be 120
+        assertEquals(120, result.getCantidad()); // Corrección: Espera la cantidad actualizada (120)
         verify(inventarioRepository, times(1)).findByProductoId(101L);
         verify(inventarioRepository, times(1)).save(any(Inventario.class));
     }
@@ -138,7 +144,8 @@ public class InventarioServiceTest {
         Exception exception = assertThrows(IllegalArgumentException.class, () -> {
             inventarioService.reduceStock(999L, 10);
         });
-        assertEquals("Inventario no encontrado para el productoId: 999", exception.getMessage());
+        // Corrección: El mensaje de la excepción debe coincidir exactamente con el del servicio.
+        assertEquals("Producto con ID 999 no encontrado en el inventario.", exception.getMessage());
         verify(inventarioRepository, times(1)).findByProductoId(999L);
         verify(inventarioRepository, never()).save(any(Inventario.class));
     }
@@ -155,7 +162,8 @@ public class InventarioServiceTest {
         Exception exception = assertThrows(IllegalArgumentException.class, () -> {
             inventarioService.reduceStock(101L, 10); // Try to reduce by 10
         });
-        assertEquals("Stock insuficiente para el productoId: 101. Cantidad disponible: 5, Cantidad a reducir: 10", exception.getMessage());
+        // Corrección: El mensaje de la excepción debe coincidir exactamente con el del servicio.
+        assertEquals("No hay suficiente stock para el producto 101. Stock actual: 5, Solicitado: 10", exception.getMessage());
         verify(inventarioRepository, times(1)).findByProductoId(101L);
         verify(inventarioRepository, never()).save(any(Inventario.class));
     }
