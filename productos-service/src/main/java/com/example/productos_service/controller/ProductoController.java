@@ -4,6 +4,8 @@ package com.example.productos_service.controller;
 import com.example.productos_service.jsonapi.ProductoConStockAttributes;
 import com.example.productos_service.model.Producto;
 import com.example.productos_service.service.ProductoService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,6 +38,9 @@ public class ProductoController {
      * @return ResponseEntity con el producto creado y el estado HTTP 201 CREATED.
      */
     @PostMapping
+    @Operation(summary = "Crea un nuevo producto", description = "Permite registrar un nuevo producto en el sistema, inicializando su stock en inventario.")
+    @ApiResponse(responseCode = "201", description = "Producto creado exitosamente")
+    @ApiResponse(responseCode = "400", description = "Solicitud inválida")
     public ResponseEntity<JsonApiResponse<ProductoAttributes>> createProducto(@RequestBody Producto producto) {
         Producto savedProducto = productoService.saveProducto(producto);
 
@@ -64,6 +69,9 @@ public class ProductoController {
      * @return Mono<ResponseEntity<ProductoConStockDTO>> con el producto y su stock, o 404 NOT_FOUND.
      */
     @GetMapping("/{id}")
+    @Operation(summary = "Obtiene un producto por su ID", description = "Recupera los detalles de un producto específico, sin información de stock.")
+    @ApiResponse(responseCode = "200", description = "Producto encontrado")
+    @ApiResponse(responseCode = "404", description = "Producto no encontrado")
     public ResponseEntity<JsonApiResponse<ProductoAttributes>> getProductoById(@PathVariable Long id) {
         Optional<Producto> productoOptional = productoService.getProductoById(id);
 
@@ -104,6 +112,8 @@ public class ProductoController {
      * @return ResponseEntity con una página de productos y el estado HTTP 200 OK.
      */
     @GetMapping
+    @Operation(summary = "Lista todos los productos", description = "Recupera una lista paginada de todos los productos disponibles.")
+    @ApiResponse(responseCode = "200", description = "Lista de productos recuperada")
     public ResponseEntity<JsonApiResponse<ProductoAttributes>> getAllProductos(
             @PageableDefault(page = 0, size = 10, sort = "nombre") Pageable pageable) {
 
@@ -138,6 +148,10 @@ public class ProductoController {
      * @return ResponseEntity con el producto actualizado, o 404 NOT_FOUND si no existe.
      */
     @PutMapping("/{id}")
+    @Operation(summary = "Actualiza un producto existente", description = "Modifica los detalles de un producto dado su ID.")
+    @ApiResponse(responseCode = "200", description = "Producto actualizado exitosamente")
+    @ApiResponse(responseCode = "404", description = "Producto no encontrado") // Si tu lógica maneja 404 para update
+    @ApiResponse(responseCode = "400", description = "Solicitud inválida")
     public ResponseEntity<JsonApiResponse<ProductoAttributes>> updateProducto(@PathVariable Long id, @RequestBody Producto producto) {
         // Asegúrate de que el ID del producto que llega en el body se establezca
         // para que saveProducto lo use como actualización
@@ -186,6 +200,10 @@ public class ProductoController {
      * o 400 BAD_REQUEST si hay un problema (ej. stock insuficiente), o 404 NOT_FOUND.
      */
     @PutMapping("/{productoId}/reducir-stock/{cantidad}")
+    @Operation(summary = "Reduce el stock de un producto", description = "Decrementa la cantidad disponible de un producto, simulando una compra.")
+    @ApiResponse(responseCode = "200", description = "Stock reducido exitosamente")
+    @ApiResponse(responseCode = "400", description = "Solicitud inválida (ej. stock insuficiente)")
+    @ApiResponse(responseCode = "404", description = "Producto no encontrado")
     public Mono<ResponseEntity<JsonApiResponse<ProductoConStockAttributes>>> reducirStockProducto(@PathVariable Long productoId, @PathVariable Integer cantidad) {
         return productoService.reducirStockProducto(productoId, cantidad)
                 .map(dto -> {
@@ -213,7 +231,10 @@ public class ProductoController {
     }
 
 
-    @GetMapping("/{id}/with-stock") // Asumo que este es el endpoint para obtener con stock
+    @GetMapping("/{id}/with-stock")
+    @Operation(summary = "Obtiene un producto y su stock", description = "Recupera los detalles de un producto específico junto con su cantidad disponible en inventario.")
+    @ApiResponse(responseCode = "200", description = "Producto y stock encontrados")
+    @ApiResponse(responseCode = "404", description = "Producto no encontrado")
     public Mono<ResponseEntity<JsonApiResponse<ProductoConStockAttributes>>> getProductoByIdWithStock(@PathVariable Long id) {
         return productoService.getProductoByIdWithStock(id)
                 .map(dto -> {

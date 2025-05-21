@@ -2,6 +2,8 @@ package com.example.inventario_service.controller;
 
 import com.example.inventario_service.model.Inventario;
 import com.example.inventario_service.service.InventarioService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -31,6 +33,9 @@ public class InventarioController {
      * @return ResponseEntity con el objeto Inventario creado/actualizado y 201 CREATED.
      */
     @PostMapping
+    @Operation(summary = "Crea o actualiza una entrada de inventario", description = "Añade una nueva entrada de inventario o actualiza la cantidad de un producto existente.")
+    @ApiResponse(responseCode = "201", description = "Entrada de inventario creada/actualizada exitosamente")
+    @ApiResponse(responseCode = "400", description = "Solicitud inválida")
     public ResponseEntity<JsonApiResponse<InventarioAttributes>> createOrUpdateInventario(@RequestBody Inventario inventario) {
         Inventario savedInventario = inventarioService.saveInventario(inventario);
 
@@ -55,7 +60,9 @@ public class InventarioController {
      * GET /api/inventario
      * @return ResponseEntity con la lista de Inventarios y 200 OK.
      */
-    @GetMapping // Suponiendo que tienes un endpoint para listar todo el inventario
+    @GetMapping
+    @Operation(summary = "Lista todas las entradas de inventario", description = "Recupera una lista de todas las entradas de inventario.")
+    @ApiResponse(responseCode = "200", description = "Lista de inventario recuperada")
     public ResponseEntity<JsonApiResponse<InventarioAttributes>> getAllInventario() {
         Iterable<Inventario> inventarios = inventarioService.getAllInventario();
 
@@ -79,6 +86,9 @@ public class InventarioController {
      * @return ResponseEntity con la entrada de inventario, o 404 NOT_FOUND.
      */
     @GetMapping("/{productoId}")
+    @Operation(summary = "Obtiene una entrada de inventario por ID de producto", description = "Recupera la información de inventario para un producto específico.")
+    @ApiResponse(responseCode = "200", description = "Entrada de inventario encontrada")
+    @ApiResponse(responseCode = "404", description = "Producto no encontrado en inventario")
     public ResponseEntity<JsonApiResponse<InventarioAttributes>> getInventarioByProductoId(@PathVariable Long productoId) {
         Optional<Inventario> inventarioOptional = inventarioService.getInventarioByProductoId(productoId);
 
@@ -105,6 +115,9 @@ public class InventarioController {
      * @return ResponseEntity con la entrada de inventario actualizada, 400 BAD_REQUEST si no hay stock, o 404 NOT_FOUND.
      */
     @PutMapping("/comprar/{productoId}/{cantidad}")
+    @Operation(summary = "Reduce el stock de un producto en inventario", description = "Decrementa la cantidad disponible de un producto en el inventario.")
+    @ApiResponse(responseCode = "200", description = "Stock reducido exitosamente")
+    @ApiResponse(responseCode = "400", description = "Stock insuficiente o producto no encontrado")
     public ResponseEntity<JsonApiResponse<InventarioAttributes>> reducirStockProducto(
             @PathVariable Long productoId,
             @PathVariable Integer cantidad) {
