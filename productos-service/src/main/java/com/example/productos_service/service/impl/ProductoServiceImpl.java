@@ -120,7 +120,13 @@ public class ProductoServiceImpl implements ProductoService {
         return productoRepository.findAll(pageable); // <-- Usa el método findAll(Pageable) del JpaRepository
     }
 
+    @Override
     public void deleteProducto(Long id) {
+        // 1. Busca el producto por ID. Si no existe, lanza ResourceNotFoundException.
+        productoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con id: " + id));
+
+        // 2. Si el producto existe, procede a eliminarlo.
         productoRepository.deleteById(id);
     }
 }
