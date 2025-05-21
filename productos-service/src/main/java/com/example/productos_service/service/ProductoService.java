@@ -1,20 +1,32 @@
 package com.example.productos_service.service;
 
 import com.example.productos_service.model.Producto;
+import com.example.productos_service.model.ProductoConStockDTO;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ProductoService {
 
-    Producto crearProducto(Producto producto);
+    // Método para guardar/actualizar un producto (y posiblemente inicializar inventario)
+    Producto saveProducto(Producto producto);
 
-    Producto obtenerProducto(String id);
+    // Método para obtener un producto por ID y su stock (versión combinada)
+    Mono<ProductoConStockDTO> getProductoByIdWithStock(Long id);
 
-    List<Producto> listarProductos(Pageable pageable);
+    // Método para obtener un producto por ID (versión básica sin stock)
+    Optional<Producto> getProductoById(Long id);
 
-    Producto actualizarProducto(String id, Producto producto);
+    // Método para obtener todos los productos
+    Page<Producto> getAllProductos(Pageable pageable);
 
-    void eliminarProducto(String id);
+    // Método para eliminar un producto por ID
+    void deleteProducto(Long id);
+
+    // Método para reducir el stock de un producto, retorna el DTO combinado
+    Mono<ProductoConStockDTO> reducirStockProducto(Long productoId, Integer cantidad);
 
 }

@@ -1,0 +1,16 @@
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: jdbc:postgresql://inventario-db:5432/inventario_db
+    username: user
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: update # Dejamos 'update' para que Hibernate cree la tabla si es necesario
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: false

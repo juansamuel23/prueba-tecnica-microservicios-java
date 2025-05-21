@@ -1,40 +1,97 @@
-version: '3.8' # Versión de la sintaxis de Docker Compose
+version: '3.9'
 
 services:
-  #Servicio de la base  de datos PostgreSQL
-  db:
-    image: postgres:13-alpine #imagen de postgreSQL
-    container_name: productos_db_container #nombre del contenedor
-    restart: always
+  # Microservicio de Productos
+  productos-service:
+    build:
+      context: ./productos-service # Ruta al Dockerfile del servicio de Productos
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081" # Mapea el puerto del contenedor al puerto del host
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://productos-db:5432/productos_db
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update # o none si Flyway maneja todo
+      SPRING_FLYWAY_URL: jdbc:postgresql://productos-db:5432/productos_db
+      SPRING_FLYWAY_USER: user
+      SPRING_FLYWAY_PASSWORD: password
+      # Otros envs si los tienes, como la API Key para este servicio
+    depends_on:
+      productos-db:
+        condition: service_healthy # Asegura que la DB esté lista antes de iniciar el servicio
+    networks:
+      - microservice-network # Red compartida
+
+  # Base de datos PostgreSQL para Productos
+  productos-db:
+    image: postgres:13
+    ports:
+      - "5431:5432" # Mapea un puerto diferente del host para evitar conflictos (5431)
     environment:
       POSTGRES_DB: productos_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: sasa
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
     volumes:
-      - db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U devuser -d productos_db" ]
+      - productos_data:/var/lib/postgresql/data # Persistencia de datos
+    healthcheck: # Healthcheck para asegurar que la DB esté lista
+      test: ["CMD-SHELL", "pg_isready -U user -d productos_db"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - microservice-network # Red compartida
 
-  #Microservicio de Productos
-  productos-service:
-    build: ./productos-service
-    container_name: productos_service_container
-    restart: on-failure #reinicia si falla
+  # AQUI EMPIEZA EL NUEVO SERVICIO DE INVENTARIO Y SU DB
+
+  # Microservicio de Inventario
+  inventario-service:
+    build:
+      context: ./inventario-service # Ruta al Dockerfile del servicio de Inventario
+      dockerfile: Dockerfile
     ports:
-      - "8081:8081"
+      - "8082:8082" # Mapea el puerto del contenedor al puerto del host
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/productos_db # Usa el nombre del servicio 'db' para la URL de la DB
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: sasa
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_DATASOURCE_URL: jdbc:postgresql://inventario-db:5432/inventario_db
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update # o none si Flyway maneja todo
+      SPRING_FLYWAY_URL: jdbc:postgresql://inventario-db:5432/inventario_db
+      SPRING_FLYWAY_USER: user
+      SPRING_FLYWAY_PASSWORD: password
+      # Configuración para el servicio de productos si la integración está activa
+      # PRODUCTOS_SERVICE_URL: http://productos-service:8081 # Usar el nombre del servicio Docker
+      # PRODUCTOS_SERVICE_API_KEY: tu_api_key_aqui
     depends_on:
-      db:
-        condition: service_healthy # Espera hasta que el healthcheck de 'db' pase
+      inventario-db:
+        condition: service_healthy # Asegura que la DB esté lista antes de iniciar el servicio
+    networks:
+      - microservice-network # Red compartida
+
+  # Base de datos PostgreSQL para Inventario
+  inventario-db:
+    image: postgres:13
+    ports:
+      - "5432:5432" # Mapea el puerto 5432 del contenedor al puerto 5432 del host.
+        # ¡Asegúrate de que no haya otro servicio usando el 5432 en tu host!
+      # productos-db usa 5431 en el host para evitar conflicto.
+    environment:
+      POSTGRES_DB: inventario_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - inventario_data:/var/lib/postgresql/data # Persistencia de datos
+    healthcheck: # Healthcheck para asegurar que la DB esté lista
+      test: ["CMD-SHELL", "pg_isready -U user -d inventario_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservice-network # Red compartida
 
 volumes:
-    db_data: # Define el volumen nombrado para persistir los datos de la base de datos
+  productos_data:
+  inventario_data: # Define el volumen para los datos de Inventario
+
+networks:
+  microservice-network: # Red común para todos los servicios

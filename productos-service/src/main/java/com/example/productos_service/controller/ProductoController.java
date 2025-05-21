@@ -1,148 +1,139 @@
 package com.example.productos_service.controller;
 
-import com.example.productos_service.dto.ProductoAttributes;
-import com.example.productos_service.dto.ProductoResource;
+
 import com.example.productos_service.model.Producto;
+import com.example.productos_service.model.ProductoConStockDTO;
 import com.example.productos_service.service.ProductoService;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.util.UriBuilderFactory;
-import org.springframework.web.util.UriComponentsBuilder;
 
-import java.net.URI;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import reactor.core.publisher.Mono;
+import java.util.Optional;
+
 
 @RestController
 @RequestMapping(value = "/productos", produces = MediaType.APPLICATION_JSON_VALUE)
 public class ProductoController {
 
-    private final ProductoService productoService;
+    @Autowired
+    private ProductoService productoService; // Inyecta el servicio de Productos
 
-    public ProductoController(ProductoService productoService) {
-        this.productoService = productoService;
+    /**
+     * Crea un nuevo producto.
+     * POST /api/productos
+     * @param producto El objeto Producto enviado en el cuerpo de la solicitud.
+     * @return ResponseEntity con el producto creado y el estado HTTP 201 CREATED.
+     */
+    @PostMapping
+    public ResponseEntity<Producto> createProducto(@RequestBody Producto producto) {
+        Producto savedProducto = productoService.saveProducto(producto);
+        return new ResponseEntity<>(savedProducto, HttpStatus.CREATED);
     }
 
-    // --- Endpoint para Crear un Producto (POST) ---
-    // Recibe un ProductoResource en el cuerpo de la petición.
-    // Retorna un 201 Created con el recurso del producto creado y la URL en la cabecera Location.
-    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE) // Espera JSON en la petición
-    public ResponseEntity<ProductoResource> crearProducto(@RequestBody ProductoResource requestResource, UriComponentsBuilder ucb) {
-        // Validar que el DTO de entrada no sea nulo y contenga atributos
-        if (requestResource == null || requestResource.getData() == null || requestResource.getData().getAttributes() == null) {
-            // En un caso real, aquí se podría lanzar una excepción de validación
-            // o construir una respuesta de error JSON API más detallada.
-            return ResponseEntity.badRequest().build(); // 400 Bad Request
-        }
-
-        ProductoAttributes attributes = requestResource.getData().getAttributes();
-        String productId = requestResource.getData().getId(); // Intenta obtener el ID del request
-
-        // Si el ID no viene en el request o está vacío, genera uno nuevo (UUID)
-        if (productId == null || productId.isEmpty()) {
-            productId = UUID.randomUUID().toString();
-        }
-
-        // Convertir DTO (ProductoAttributes) a Entidad (Producto)
-        Producto productoParaGuardar = new Producto(productId, attributes.getNombre(), attributes.getPrecio());
-
-        // Llamar al servicio para guardar el producto
-        Producto nuevoProducto = productoService.crearProducto(productoParaGuardar);
-
-        // Convertir la Entidad (Producto) a DTO (ProductoResource) para la respuesta JSON API
-        ProductoResource responseResource = new ProductoResource();
-        responseResource.setData(new ProductoResource.ProductData(
-                nuevoProducto.getId(),
-                "productos", // El 'type' para JSON API, típicamente el nombre del recurso en plural
-                new ProductoAttributes(nuevoProducto.getNombre(), nuevoProducto.getPrecio())
-        ));
-
-        // Construir la URI del recurso recién creado para la cabecera 'Location' (JSON API best practice)
-        URI locationUri = ucb.path("/productos/{id}")
-                .buildAndExpand(nuevoProducto.getId())
-                .toUri();
-
-        return ResponseEntity.created(locationUri).body(responseResource); // Retorna 201 Created
-    }
-
-    // --- Endpoint para Obtener un Producto por ID (GET) ---
-    // Retorna un 200 OK con el recurso del producto si es encontrado, o un 404 Not Found si no.
+    /**
+     * Obtiene un producto por su ID, incluyendo la información de stock.
+     * GET /api/productos/{id}
+     * @param id El ID del producto.
+     * @return Mono<ResponseEntity<ProductoConStockDTO>> con el producto y su stock, o 404 NOT_FOUND.
+     */
     @GetMapping("/{id}")
-    public ResponseEntity<ProductoResource> obtenerProductoPorId(@PathVariable String id) {
-        // Llama al servicio para obtener el producto. El servicio maneja la ResourceNotFoundException.
-        Producto producto = productoService.obtenerProducto(id);
-
-        // Convertir la Entidad (Producto) a DTO (ProductoResource) para la respuesta JSON API
-        ProductoResource responseResource = new ProductoResource();
-        responseResource.setData(new ProductoResource.ProductData(
-                producto.getId(),
-                "productos",
-                new ProductoAttributes(producto.getNombre(), producto.getPrecio())
-        ));
-
-        return ResponseEntity.ok(responseResource); // Retorna 200 OK
+    public Mono<ResponseEntity<ProductoConStockDTO>> getProductoById(@PathVariable Long id) {
+        return productoService.getProductoByIdWithStock(id)
+                .map(dto -> new ResponseEntity<>(dto, HttpStatus.OK))
+                .defaultIfEmpty(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
-    // --- Endpoint para Listar Productos con Paginación (GET) ---
-    // Retorna un 200 OK con una lista de recursos de producto.
+    /**
+     * Obtiene un producto por su ID, sin incluir la información de stock (solo el producto base).
+     * GET /api/productos/basic/{id}
+     * @param id El ID del producto.
+     * @return ResponseEntity con el producto, o 404 NOT_FOUND.
+     */
+    @GetMapping("/basic/{id}")
+    public ResponseEntity<Producto> getProductoByIdBasic(@PathVariable Long id) {
+        Optional<Producto> producto = productoService.getProductoById(id);
+        return producto.map(value -> new ResponseEntity<>(value, HttpStatus.OK))
+                .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
+
+    /**
+     * Obtiene todos los productos con paginación.
+     * GET /api/productos?page=0&size=10&sort=nombre,asc
+     * @param pageable Objeto Pageable inyectado automáticamente por Spring.
+     * Puedes usar @PageableDefault para definir valores por defecto.
+     * @return ResponseEntity con una página de productos y el estado HTTP 200 OK.
+     */
     @GetMapping
-    public ResponseEntity<List<ProductoResource.ProductData>> listarProductos(
-            @RequestParam(defaultValue = "0") int page, // Número de página (por defecto 0)
-            @RequestParam(defaultValue = "10") int size) { // Tamaño de la página (por defecto 10)
-
-        Pageable pageable = PageRequest.of(page, size); // Crea un objeto Pageable
-        List<Producto> productos = productoService.listarProductos(pageable); // Llama al servicio
-
-        // Mapear la lista de entidades Producto a una lista de ProductData (parte de JSON API)
-        // Para una implementación completa de JSON API de colecciones, se necesitarían
-        // 'links' y 'meta' para la paginación, dentro de un objeto raíz 'ProductoListResource'.
-        // Aquí devolvemos directamente la lista de objetos 'data'.
-        List<ProductoResource.ProductData> productDataList = productos.stream()
-                .map(p -> new ProductoResource.ProductData(p.getId(), "productos", new ProductoAttributes(p.getNombre(), p.getPrecio())))
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(productDataList); // Retorna 200 OK
+    public ResponseEntity<Page<Producto>> getAllProductos(
+            @PageableDefault(page = 0, size = 10, sort = "nombre") Pageable pageable) { // <-- Modificado
+        Page<Producto> productosPage = productoService.getAllProductos(pageable); // <-- Llama al servicio con Pageable
+        return new ResponseEntity<>(productosPage, HttpStatus.OK);
     }
 
-    // --- Endpoint para Actualizar un Producto (PUT) ---
-    // Recibe un ProductoResource y el ID.
-    // Retorna un 200 OK con el recurso actualizado, o 404 Not Found si el producto no existe.
-    @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ProductoResource> actualizarProducto(@PathVariable String id, @RequestBody ProductoResource requestResource) {
-        // Validar que el DTO de entrada no sea nulo y contenga atributos
-        if (requestResource == null || requestResource.getData() == null || requestResource.getData().getAttributes() == null) {
-            return ResponseEntity.badRequest().build(); // 400 Bad Request
+    /**
+     * Actualiza un producto existente.
+     * PUT /api/productos/{id}
+     * @param id El ID del producto a actualizar.
+     * @param producto El objeto Producto con los datos actualizados.
+     * @return ResponseEntity con el producto actualizado, o 404 NOT_FOUND si no existe.
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<Producto> updateProducto(@PathVariable Long id, @RequestBody Producto producto) {
+        Optional<Producto> existingProducto = productoService.getProductoById(id);
+        if (existingProducto.isPresent()) {
+            producto.setId(id); // Asegura que el ID de la URL se use
+            Producto updatedProducto = productoService.saveProducto(producto);
+            return new ResponseEntity<>(updatedProducto, HttpStatus.OK);
+        } else {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
-
-        ProductoAttributes attributes = requestResource.getData().getAttributes();
-
-        // Convertir DTO a Entidad (Producto) para el servicio
-        // Usamos el ID del path, no el del requestResource, para asegurar que actualizamos el recurso correcto.
-        Producto productoParaActualizar = new Producto(id, attributes.getNombre(), attributes.getPrecio());
-
-        // Llamar al servicio para actualizar el producto
-        Producto updatedProducto = productoService.actualizarProducto(id, productoParaActualizar);
-
-        // Convertir la Entidad (Producto) a DTO (ProductoResource) para la respuesta JSON API
-        ProductoResource responseResource = new ProductoResource();
-        responseResource.setData(new ProductoResource.ProductData(
-                updatedProducto.getId(),
-                "productos",
-                new ProductoAttributes(updatedProducto.getNombre(), updatedProducto.getPrecio())
-        ));
-
-        return ResponseEntity.ok(responseResource); // Retorna 200 OK
     }
 
-    // --- Endpoint para Eliminar un Producto (DELETE) ---
-    // Retorna un 204 No Content si la eliminación es exitosa, o 404 Not Found si el producto no existe.
+    /**
+     * Elimina un producto por su ID.
+     * DELETE /api/productos/{id}
+     * @param id El ID del producto a eliminar.
+     * @return ResponseEntity con 204 NO_CONTENT si se elimina, o 404 NOT_FOUND si no existe.
+     */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarProducto(@PathVariable String id) {
-        productoService.eliminarProducto(id); // Llama al servicio
-        return ResponseEntity.noContent().build(); // Retorna 204 No Content
+    public ResponseEntity<Void> deleteProducto(@PathVariable Long id) {
+        Optional<Producto> existingProducto = productoService.getProductoById(id);
+        if (existingProducto.isPresent()) {
+            productoService.deleteProducto(id);
+            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        } else {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+
+    /**
+     * Reduce el stock de un producto específico.
+     * PUT /api/productos/{id}/reducir-stock/{cantidad}
+     * @param id El ID del producto.
+     * @param cantidad La cantidad a reducir.
+     * @return Mono<ResponseEntity<ProductoConStockDTO>> con el producto y su stock actualizado,
+     * o 400 BAD_REQUEST si hay un problema (ej. stock insuficiente), o 404 NOT_FOUND.
+     */
+    @PutMapping("/{id}/reducir-stock/{cantidad}")
+    public Mono<ResponseEntity<ProductoConStockDTO>> reducirStockProducto(@PathVariable Long id, @PathVariable Integer cantidad) {
+        return productoService.reducirStockProducto(id, cantidad)
+                .map(dto -> new ResponseEntity<>(dto, HttpStatus.OK))
+                .defaultIfEmpty(new ResponseEntity<>(HttpStatus.NOT_FOUND)) // Si el producto no se encuentra o el inventario no devuelve nada
+                .onErrorResume(IllegalArgumentException.class, e -> {
+                    // Captura errores específicos como "stock insuficiente"
+                    System.err.println("Error de cliente al reducir stock para producto " + id + ": " + e.getMessage());
+                    return Mono.just(new ResponseEntity<>(HttpStatus.BAD_REQUEST));
+                })
+                .onErrorResume(e -> {
+                    // Captura cualquier otra excepción no esperada
+                    System.err.println("Error inesperado al reducir stock para producto " + id + ": " + e.getMessage());
+                    return Mono.just(new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR));
+                });
     }
 }
